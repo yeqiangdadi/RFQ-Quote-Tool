@@ -1,0 +1,188 @@
+{
+  "source": "00-A-0001-12-1CS3.pdf",
+  "item_count": 16,
+  "source_headers": [
+    "ID",
+    "ND",
+    "DESCRIPTION",
+    "QTY"
+  ],
+  "items": [
+    {
+      "row_number": "1",
+      "source": {
+        "ID": "1",
+        "ND": "3/4\"",
+        "DESCRIPTION": "PIPE, XS, CS, SMLS, ASTM A53-B, TYPE S",
+        "QTY": "4\""
+      },
+      "uom": "m(meter)",
+      "quantity": 0.1
+    },
+    {
+      "row_number": "2",
+      "source": {
+        "ID": "2",
+        "ND": "8\"",
+        "DESCRIPTION": "PIPE, STD, CS, ERW, ASTM A53-B, TYPE E (EJ=0.85)",
+        "QTY": "18'-4\""
+      },
+      "uom": "m(meter)",
+      "quantity": 5.59
+    },
+    {
+      "row_number": "3",
+      "source": {
+        "ID": "3",
+        "ND": "12\"",
+        "DESCRIPTION": "PIPE, STD, CS, ERW, ASTM A53-B, TYPE E (EJ=0.85)",
+        "QTY": "58'-4\""
+      },
+      "uom": "m(meter)",
+      "quantity": 17.78
+    },
+    {
+      "row_number": "4",
+      "source": {
+        "ID": "4",
+        "ND": "12\"",
+        "DESCRIPTION": "CAP. WELD. CS. ASTM A234-WPB-S. ASME B16.9",
+        "QTY": "2"
+      },
+      "uom": "EA(each)",
+      "quantity": 2
+    },
+    {
+      "row_number": "5",
+      "source": {
+        "ID": "5",
+        "ND": "8\"",
+        "DESCRIPTION": "90 LR ELL, WELD, CS, ASTM A234-WPB-W, ASME B16.9",
+        "QTY": "2"
+      },
+      "uom": "EA(each)",
+      "quantity": 2
+    },
+    {
+      "row_number": "6",
+      "source": {
+        "ID": "6",
+        "ND": "12\"",
+        "DESCRIPTION": "90 LR ELL, WELD, CS, ASTM A234-WPB-W, ASME B16.9",
+        "QTY": "4"
+      },
+      "uom": "EA(each)",
+      "quantity": 4
+    },
+    {
+      "row_number": "7",
+      "source": {
+        "ID": "7",
+        "ND": "12\"X8\"",
+        "DESCRIPTION": "REDUCER (CONC), WELD, CS, ASTM A234-WPB-W, ASME B16.9",
+        "QTY": "1"
+      },
+      "uom": "EA(each)",
+      "quantity": 1
+    },
+    {
+      "row_number": "8",
+      "source": {
+        "ID": "8",
+        "ND": "12\"",
+        "DESCRIPTION": "TEE, WELD, CS, ASTM A234-WPB-W, ASME B16.9",
+        "QTY": "2"
+      },
+      "uom": "EA(each)",
+      "quantity": 2
+    },
+    {
+      "row_number": "9",
+      "source": {
+        "ID": "9",
+        "ND": "12\"X3/4\"",
+        "DESCRIPTION": "SOCKOLET, CLASS 3000, WELD, CS, ASTM A105N, MSS SP-97",
+        "QTY": "1"
+      },
+      "uom": "EA(each)",
+      "quantity": 1
+    },
+    {
+      "row_number": "10",
+      "source": {
+        "ID": "10",
+        "ND": "8\"",
+        "DESCRIPTION": "FLANGE SLIP-ON, CLASS 150, RF, CS, ASTM A105N, ASME B16.5",
+        "QTY": "1"
+      },
+      "uom": "EA(each)",
+      "quantity": 1
+    },
+    {
+      "row_number": "11",
+      "source": {
+        "ID": "11",
+        "ND": "12\"",
+        "DESCRIPTION": "FLANGE SLIP-ON, CLASS 150, RF, CS, ASTM A105N, ASME B16.5",
+        "QTY": "7"
+      },
+      "uom": "EA(each)",
+      "quantity": 7
+    },
+    {
+      "row_number": "12",
+      "source": {
+        "ID": "12",
+        "ND": "3/4\"X4 1/4\"",
+        "DESCRIPTION": "STUD BOLT, ASTM A193, GR B7 STUD, W/ 2 HEAVY HEX NUTS, ASTM A194, GR 2H",
+        "QTY": "8"
+      },
+      "uom": "EA(each)",
+      "quantity": 8
+    },
+    {
+      "row_number": "13",
+      "source": {
+        "ID": "13",
+        "ND": "7/8\"X4 3/4\"",
+        "DESCRIPTION": "STUD BOLT, ASTM A193, GR B7 STUD, W/ 2 HEAVY HEX NUTS, ASTM A194, GR 2H",
+        "QTY": "48"
+      },
+      "uom": "EA(each)",
+      "quantity": 48
+    },
+    {
+      "row_number": "14",
+      "source": {
+        "ID": "14",
+        "ND": "8\"",
+        "DESCRIPTION": "GASKET, CLASS 150, 3/16\" THK, SPIRAL WOUND TYPE 304 SS WINDING. W/ FLEXIBLE GRAPHITE FILLER, W/ 304 SS INNER RING AND CS OUTER RING, ASME B16.20",
+        "QTY": "1"
+      },
+      "uom": "EA(each)",
+      "quantity": 1
+    },
+    {
+      "row_number": "15",
+      "source": {
+        "ID": "15",
+        "ND": "12\"",
+        "DESCRIPTION": "GASKET, CLASS 150, 3/16\" THK, SPIRAL WOUND TYPE 304 SS WINDING, W/ FLEXIBLE GRAPHITE FILLER, W/ 304 SS INNER RING AND CS OUTER RING, ASME B16.20",
+        "QTY": "4"
+      },
+      "uom": "EA(each)",
+      "quantity": 4
+    },
+    {
+      "row_number": "16",
+      "source": {
+        "ID": "16",
+        "ND": "3/4\"",
+        "DESCRIPTION": "GATE VALVE, SW, CLASS 800, CS BODY, TRIM 8",
+        "QTY": "1"
+      },
+      "uom": "EA(each)",
+      "quantity": 1
+    }
+  ]
+}

@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>询价单 · 打印</title>
+<style>
+  :root {
+    --ink: #101110;
+    --line: #2b2b28;
+    --soft: #6d6a60;
+    --accent: #0d6b5c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #e9e6df;
+    color: var(--ink);
+    font-family: "Songti SC", "SimSun", "Noto Serif SC", serif;
+  }
+  .toolbar {
+    position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 14px;
+    padding: 12px 20px; background: #1a1b18; color: #f5f3ec;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 13px;
+  }
+  .toolbar strong { font-weight: 600; }
+  .toolbar span { color: #b9b4a8; }
+  .toolbar .grow { flex: 1; }
+  .toolbar button {
+    font: inherit; font-weight: 600; padding: 8px 18px; border-radius: 7px; border: 1px solid #f5f3ec;
+    background: #f5f3ec; color: #1a1b18; cursor: pointer;
+  }
+  .toolbar button:hover { background: #fff; }
+  .toolbar a { color: #cfcabe; text-decoration: none; }
+  .toolbar a:hover { color: #fff; }
+
+  .sheet {
+    width: 297mm; min-height: 210mm; margin: 22px auto; padding: 12mm 11mm 10mm;
+    background: #fff; box-shadow: 0 6px 30px rgba(0, 0, 0, .12);
+  }
+  .head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12mm; margin-bottom: 4mm; }
+  .head h1 { margin: 0; font-size: 15pt; font-weight: 700; letter-spacing: .04em; }
+  .head .sub { margin-top: 1.5mm; font-size: 8.5pt; color: var(--soft); }
+  .head .meta { text-align: right; font-size: 8.5pt; color: var(--soft); line-height: 1.7; }
+  .rule { height: 1.6pt; background: var(--ink); margin-bottom: 3mm; }
+
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  thead { display: table-header-group; }
+  th, td {
+    border: .5pt solid var(--line);
+    padding: 1.6mm 1.4mm;
+    font-size: 8.4pt;
+    line-height: 1.45;
+    vertical-align: middle;
+    text-align: center;
+    word-break: break-word;
+  }
+  th { font-weight: 700; background: #f2f0ea; font-size: 8.2pt; }
+  td.desc, td.remarks { text-align: left; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tbody tr { break-inside: avoid; }
+  .foot {
+    display: flex; justify-content: space-between; gap: 10mm; margin-top: 5mm;
+    font-size: 8pt; color: var(--soft);
+  }
+  .sign { display: flex; gap: 8mm; }
+  .sign span { border-bottom: .5pt solid var(--line); min-width: 32mm; padding-bottom: 1mm; }
+
+  @page { size: A4 landscape; margin: 10mm; }
+
+  @media print {
+    body { background: #fff; }
+    .toolbar { display: none; }
+    .sheet { width: auto; min-height: 0; margin: 0; padding: 0; box-shadow: none; }
+    thead { display: table-header-group; }
+    tr { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <strong>询价单打印预览</strong>
+  <span>A4 横向 · 打印时选择「另存为 PDF」即可保存</span>
+  <div class="grow"></div>
+  <button onclick="window.print()">打印 / 存 PDF</button>
+  <a href="/">返回编辑</a>
+</div>
+
+<div class="sheet">
+  <div class="head">
+    <div>
+      <h1>询 价 单</h1>
+      <div class="sub" id="subtitle"></div>
+    </div>
+    <div class="meta" id="meta"></div>
+  </div>
+  <div class="rule"></div>
+
+  <table>
+    <colgroup id="colgroup"></colgroup>
+    <thead>
+      <tr id="headRow"></tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+  <div class="foot">
+    <div>说明：数量与单位以图纸 QTY 栏为准；价格栏由供应商填写。</div>
+    <div class="sign">
+      <span>编制</span><span>审核</span><span>日期</span>
+    </div>
+  </div>
+</div>
+
+<script>
+const doc = (() => {
+  try { return JSON.parse(localStorage.getItem('quote_doc') || 'null'); }
+  catch { return null; }
+})();
+
+const TEMPLATE_FIELDS = ['unit_weight', 'total_weight', 'unit_price', 'total_price'];
+const TEMPLATE_TITLES = ['单重', '总重', '单价', '总价'];
+const NUMERIC = new Set(['unit_weight', 'total_weight', 'unit_price', 'total_price']);
+
+function collectHeaders(items) {
+  const headers = [];
+  items.forEach((item) => Object.keys(item.source || {}).forEach((name) => {
+    if (name && !headers.includes(name)) headers.push(name);
+  }));
+  return headers;
+}
+function sourceWidth(name) {
+  const t = name.toLowerCase();
+  if (/description|desc|名称|描述/.test(t)) return '24%';
+  if (/remark|备注|说明/.test(t)) return '16%';
+  return '6.5%';
+}
+
+if (!doc || !doc.items) {
+  document.body.innerHTML = '<div style="padding:40px;font-family:sans-serif">没有可打印的报价单，请回到编辑页点击「打印 / 存 PDF」。</div>';
+} else {
+  document.title = `${doc.title} · 询价单`;
+  document.getElementById('subtitle').textContent = doc.subtitle || '';
+  document.getElementById('meta').innerHTML =
+    `<div>${escapeHtml(doc.title)}</div><div>${new Date().toLocaleDateString('zh-CN')}</div>`;
+
+  const sourceHeaders = (doc.sourceHeaders && doc.sourceHeaders.length) ? doc.sourceHeaders : collectHeaders(doc.items);
+  const templateWidths = ['7%', '7%', '7%', '7%'];
+  const columns = [
+    ...sourceHeaders.map((name) => ({ src: name, key: `src:${name}`, title: name, width: sourceWidth(name), cls: 'desc' })),
+    ...TEMPLATE_FIELDS.map((key, i) => ({ key, title: TEMPLATE_TITLES[i], width: templateWidths[i], cls: NUMERIC.has(key) ? 'num' : '' })),
+  ];
+
+  const colgroup = document.getElementById('colgroup');
+  const headRow = document.getElementById('headRow');
+  columns.forEach((col) => {
+    const colEl = document.createElement('col');
+    colEl.style.width = col.width;
+    colgroup.appendChild(colEl);
+    const th = document.createElement('th');
+    th.textContent = col.title;
+    headRow.appendChild(th);
+  });
+
+  const body = document.getElementById('rows');
+  doc.items.forEach((item) => {
+    const tr = document.createElement('tr');
+    columns.forEach((col) => {
+      const td = document.createElement('td');
+      td.className = col.cls;
+      const value = col.src ? (item.source ? item.source[col.src] : '') : item[col.key];
+      const text = String(value == null ? '' : value);
+      const parts = text.split(/(?<=[,;])/);
+      parts.forEach((part, j) => {
+        td.appendChild(document.createTextNode(part));
+        if (j < parts.length - 1) td.appendChild(document.createElement('wbr'));
+      });
+      tr.appendChild(td);
+    });
+    body.appendChild(tr);
+  });
+}
+
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+window.addEventListener('afterprint', () => {});
+</script>
+</body>
+</html>

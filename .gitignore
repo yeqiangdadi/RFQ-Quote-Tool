@@ -1,0 +1,11 @@
+.venv/
+venv/
+offline/
+wheels/
+python/
+output/
+RFQ-Quote-Tool/
+__pycache__/
+*.py[cod]
+install.log
+.DS_Store
