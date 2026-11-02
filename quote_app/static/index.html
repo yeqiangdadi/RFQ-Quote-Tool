@@ -866,18 +866,32 @@ function renderMarkers() {
     line.setAttribute('x2', m.x);
     line.setAttribute('y2', imgHeight);
     line.setAttribute('stroke', '#0d6b5c');
-    line.setAttribute('stroke-width', '2');
-    line.setAttribute('stroke-dasharray', '4,2');
+    line.setAttribute('stroke-width', '1');
+    line.setAttribute('stroke-dasharray', '3,3');
+    line.setAttribute('opacity', '0.4');
     line.style.pointerEvents = 'stroke';
     line.style.cursor = 'ew-resize';
+    line.addEventListener('mouseenter', () => line.setAttribute('opacity', '0.8'));
+    line.addEventListener('mouseleave', () => line.setAttribute('opacity', '0.4'));
     line.addEventListener('mousedown', (e) => startDrag(e, i));
     svg.appendChild(line);
 
+    const labelBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    labelBg.setAttribute('x', m.x - 2);
+    labelBg.setAttribute('y', 0);
+    labelBg.setAttribute('width', '28');
+    labelBg.setAttribute('height', '16');
+    labelBg.setAttribute('fill', '#0d6b5c');
+    labelBg.setAttribute('opacity', '0.8');
+    labelBg.setAttribute('rx', '2');
+    svg.appendChild(labelBg);
+
     const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    label.setAttribute('x', m.x + 4);
-    label.setAttribute('y', 16);
-    label.setAttribute('fill', '#0d6b5c');
-    label.setAttribute('font-size', '12');
+    label.setAttribute('x', m.x + 2);
+    label.setAttribute('y', 12);
+    label.setAttribute('fill', '#fff');
+    label.setAttribute('font-size', '10');
+    label.setAttribute('font-weight', 'bold');
     label.textContent = `列${i + 1}`;
     svg.appendChild(label);
   });

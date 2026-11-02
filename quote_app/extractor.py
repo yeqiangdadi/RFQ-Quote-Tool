@@ -581,6 +581,22 @@ def extract_with_columns(boxes, texts, col_positions, header_y_range=None):
     header_row.sort(key=lambda r: r[0])
     header_y = max(y1 for _, _, _, y1, _ in header_row)
 
+    # Use header text box centers as column positions (more accurate than user markers)
+    # User markers only determine the NUMBER of columns
+    num_cols = len(col_positions)
+    header_centers = sorted([(x0 + x1) / 2 for x0, y0, x1, y1, _ in header_row])
+
+    # If header has enough boxes, use them; otherwise fall back to markers
+    if len(header_centers) >= num_cols:
+        # Take the first num_cols header centers, or distribute evenly
+        if len(header_centers) == num_cols:
+            col_positions = header_centers
+        else:
+            # Pick num_cols evenly spaced centers from header
+            step = len(header_centers) / num_cols
+            col_positions = [header_centers[int(i * step)] for i in range(num_cols)]
+    # else: keep user's col_positions as-is
+
     # Sort column positions
     col_positions = sorted(col_positions)
 
@@ -624,28 +640,37 @@ def extract_with_columns(boxes, texts, col_positions, header_y_range=None):
             "_texts": [text],
         })
 
-    # Data row cells - assign texts to columns based on col_positions
+    # Data row cells - use marker-based grouping with nearest-neighbor assignment
+    num_cols = len(col_positions)
     for row in data_rows:
         row_ys = [y0 for _, y0, _, _, _ in row] + [y1 for _, _, _, y1, _ in row]
         ry0 = min(row_ys)
         ry1 = max(row_ys)
 
-        # Create column boundaries: use col_positions as left edges, last column extends to right
-        boundaries = col_positions + [99999]
+        # Sort text boxes by x position
+        sorted_row = sorted(row, key=lambda b: b[0])
 
-        col_texts = {ci: [] for ci in range(len(col_positions))}
-        for x0, y0, x1, y1, text in row:
+        # Calculate midpoints between consecutive markers as boundaries
+        boundaries = []
+        for i in range(len(col_positions) - 1):
+            mid = (col_positions[i] + col_positions[i + 1]) / 2
+            boundaries.append(mid)
+        boundaries = [0] + boundaries + [99999]
+
+        # Assign each text box to column based on its center position
+        col_groups = {ci: [] for ci in range(num_cols)}
+        for x0, y0, x1, y1, text in sorted_row:
             xc = (x0 + x1) / 2
-            # Find which column this text belongs to based on left boundary
             ci = 0
-            for bi in range(len(boundaries)-1):
-                if boundaries[bi] <= xc < boundaries[bi+1]:
+            for bi in range(len(boundaries) - 1):
+                if boundaries[bi] <= xc < boundaries[bi + 1]:
                     ci = bi
                     break
-            col_texts[ci].append((x0, y0, x1, y1, text))
+            col_groups[ci].append((x0, y0, x1, y1, text))
 
-        for ci in range(len(col_positions)):
-            blocks = col_texts[ci]
+        # Create cells for each column
+        for ci in range(num_cols):
+            blocks = col_groups[ci]
             if not blocks:
                 cx = col_positions[ci]
                 cells.append({
