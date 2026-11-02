@@ -38,6 +38,12 @@ class ExportRequest(BaseModel):
     items: list[dict] = []
 
 
+class ManualExtractRequest(BaseModel):
+    job_id: str
+    col_positions: list[float]  # x-coordinates of column centers (in preview image coords)
+    header_y: float | None = None  # optional y-center of header row
+
+
 def _cleanup_jobs():
     now = time.time()
     for job_id, job in list(JOBS.items()):
@@ -152,6 +158,65 @@ def export(request: ExportRequest):
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers=headers,
     )
+
+
+@app.post("/api/manual_extract")
+def manual_extract(request: ManualExtractRequest):
+    """Extract table using manually specified column positions."""
+    from . import extractor
+    import numpy as np
+
+    job = JOBS.get(request.job_id)
+    if not job:
+        raise HTTPException(404, "任务不存在或已过期")
+
+    workdir = OUTPUT / request.job_id
+    # Load OCR results
+    ocr_data_path = workdir / "ocr_data.json"
+    if not ocr_data_path.exists():
+        raise HTTPException(400, "OCR 数据不存在，请先完成识别")
+
+    ocr_data = json.loads(ocr_data_path.read_text(encoding="utf-8"))
+    boxes = ocr_data["boxes"]
+    texts = ocr_data["texts"]
+    preview_width = ocr_data.get("preview_width", 1400)
+    image_width = ocr_data.get("image_width", preview_width)
+
+    # Scale column positions from preview coords to image coords
+    scale = image_width / preview_width
+    col_positions_img = [x * scale for x in request.col_positions]
+
+    # Load image to get shape
+    import pypdfium2 as pdfium
+    from PIL import Image
+    source_path = workdir / [f for f in workdir.iterdir() if f.suffix.lower() in {".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".webp", ".bmp"}][0]
+    if source_path.suffix.lower() == ".pdf":
+        pdf = pdfium.PdfDocument(str(source_path))
+        page = pdf[0]
+        bmp = page.render(scale=2.0)
+        img = bmp.to_pil().convert("RGB")
+    else:
+        img = Image.open(source_path).convert("RGB")
+
+    # Run extraction with manual columns
+    header_y_range = None
+    if request.header_y is not None:
+        header_y_img = request.header_y * scale
+        header_y_range = (header_y_img - 20, header_y_img + 20)
+
+    results = extractor.extract_with_columns(boxes, texts, col_positions_img, header_y_range)
+
+    if not results:
+        return {"success": False, "error": "未能提取到表格，请检查列位置"}
+
+    # Return first result
+    result = results[0]
+    return {
+        "success": True,
+        "records": result["records"],
+        "items": result["items"],
+        "header": result["header"],
+    }
 
 
 def _free_port(start=8765):

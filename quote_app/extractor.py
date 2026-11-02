@@ -306,10 +306,411 @@ def to_quote_items(records):
     return items
 
 
+def _cluster_1d(values, tol):
+    """Cluster sorted numeric values; return list of lists."""
+    if not values:
+        return []
+    clusters = [[values[0]]]
+    for v in values[1:]:
+        if v - clusters[-1][-1] <= tol:
+            clusters[-1].append(v)
+        else:
+            clusters.append([v])
+    return clusters
+
+
+def detect_lineless_tables(boxes, texts, shape, min_texts_per_row=2, col_gap_ratio=0.3):
+    """Detect tables defined by text alignment (no cell borders).
+
+    Strategy: find header row, then use NO column to identify row starters.
+    """
+    if len(boxes) < 4:
+        return []
+
+    h, w = shape[:2]
+
+    # Filter tiny text
+    filtered = []
+    for box, text in zip(boxes, texts):
+        x0, y0, x1, y1 = box
+        bw, bh = x1 - x0, y1 - y0
+        if bw < 8 or bh < 8 or bw * bh < 100:
+            continue
+        if not text or not text.strip():
+            continue
+        filtered.append((x0, y0, x1, y1, text))
+
+    if len(filtered) < 4:
+        return []
+
+    # Find candidate header rows
+    y_groups = {}
+    for x0, y0, x1, y1, text in filtered:
+        yc = round((y0 + y1) / 2)
+        y_groups.setdefault(yc, []).append((x0, y0, x1, y1, text))
+
+    sorted_yc = sorted(y_groups.keys())
+    merged_groups = []
+    current_group = [sorted_yc[0]]
+    for yc in sorted_yc[1:]:
+        if yc - current_group[-1] <= 15:
+            current_group.append(yc)
+        else:
+            merged_groups.append(current_group)
+            current_group = [yc]
+    merged_groups.append(current_group)
+
+    # Find header
+    header_row = None
+    for group in merged_groups:
+        all_texts = []
+        for yc in group:
+            all_texts.extend(y_groups[yc])
+        if len(all_texts) < 3:
+            continue
+        matched = sum(1 for _, _, _, _, t in all_texts if match_field(t))
+        if matched >= 3:
+            header_row = all_texts
+            break
+
+    if not header_row:
+        return []
+
+    header_row.sort(key=lambda r: r[0])
+    med_w = int(np.median([x1 - x0 for x0, _, x1, _, _ in header_row]))
+    header_y = max(y1 for _, _, _, y1, _ in header_row)
+
+    # Detect column boundaries from data x-distribution in BOM region only
+    # BOM region: x from header's x-range, y from header to ~400px below
+    header_x0 = min(x0 for x0, _, _, _, _ in header_row)
+    header_x1 = max(x1 for _, _, _, x1, _ in header_row)
+    bom_texts = [(x0, y0, x1, y1, t) for x0, y0, x1, y1, t in filtered
+                 if y0 > header_y + 10 and y0 < header_y + 400 and x0 >= header_x0 - 20]
+    data_x_starts = sorted(set(x0 for x0, _, _, _, _ in bom_texts))
+    x_col_clusters = _cluster_1d(data_x_starts, 50)  # larger tolerance to merge nearby starts
+    data_col_centers = [int(np.mean(c)) for c in x_col_clusters if len(c) >= 3]
+
+    if len(data_col_centers) >= 3:
+        col_centers = data_col_centers
+    else:
+        col_centers = [(x0 + x1) / 2 for x0, _, x1, _, _ in header_row]
+
+    # Find row starters: texts in the first column (NO column) that look like row numbers
+    no_col_x = col_centers[0]
+    no_col_tol = med_w // 2
+    row_starters = []
+    for x0, y0, x1, y1, text in filtered:
+        xc = (x0 + x1) / 2
+        if abs(xc - no_col_x) <= no_col_tol and y0 > header_y + 10:
+            # Check if text looks like a row number (single digit or small number)
+            if re.match(r'^\d{1,2}$', text.strip()):
+                row_starters.append((y0, text))
+
+    row_starters.sort()
+    if not row_starters:
+        return []
+
+    # Build rows from starters
+    data_rows = []
+    for i, (starter_y, _) in enumerate(row_starters):
+        # Find all texts that belong to this row (within 60px below starter)
+        if i + 1 < len(row_starters):
+            row_end = row_starters[i + 1][0]
+        else:
+            row_end = starter_y + 100
+        row_texts = [(x0, y0, x1, y1, t) for x0, y0, x1, y1, t in filtered
+                     if starter_y - 5 <= y0 < row_end]
+        if len(row_texts) >= min_texts_per_row:
+            row_texts.sort(key=lambda r: r[0])
+            data_rows.append(row_texts)
+
+    if not data_rows:
+        return []
+
+    # Build cells
+    cells = []
+
+    # Header cells
+    for x0, y0, x1, y1, text in header_row:
+        cells.append({
+            "x0": x0, "y0": y0, "x1": x1, "y1": y1,
+            "w": x1 - x0, "h": y1 - y0,
+            "_texts": [text],
+        })
+
+    # Data row cells
+    for row in data_rows:
+        row_ys = [y0 for _, y0, _, _, _ in row] + [y1 for _, _, _, y1, _ in row]
+        ry0 = min(row_ys)
+        ry1 = max(row_ys)
+
+        # Assign each text to column based on x-start position (not center)
+        col_starts = [c["x0"] for c in cells if c["y0"] == min(c["y0"] for c in cells)]  # header row x-starts
+        # Actually use col_centers as boundaries: text belongs to column i if its x0 is between col_centers[i-1] and col_centers[i]
+        col_boundaries = [0] + [(col_centers[i] + col_centers[i+1]) / 2 for i in range(len(col_centers)-1)] + [w]
+
+        col_texts = {ci: [] for ci in range(len(col_centers))}
+        for x0, y0, x1, y1, text in row:
+            # Find which column this text belongs to based on x0
+            ci = 0
+            for bi in range(len(col_boundaries)-1):
+                if col_boundaries[bi] <= x0 < col_boundaries[bi+1]:
+                    ci = bi
+                    break
+            col_texts[ci].append((x0, y0, x1, y1, text))
+
+        for ci in range(len(col_centers)):
+            blocks = col_texts[ci]
+            if not blocks:
+                cx = col_centers[ci]
+                cells.append({
+                    "x0": cx - med_w // 2, "y0": ry0, "x1": cx + med_w // 2, "y1": ry1,
+                    "w": med_w, "h": ry1 - ry0, "_texts": [],
+                })
+            else:
+                cx0 = min(b[0] for b in blocks)
+                cy0 = min(b[1] for b in blocks)
+                cx1 = max(b[2] for b in blocks)
+                cy1 = max(b[3] for b in blocks)
+                cells.append({
+                    "x0": cx0, "y0": cy0, "x1": cx1, "y1": cy1,
+                    "w": cx1 - cx0, "h": cy1 - cy0,
+                    "_texts": [b[4] for b in blocks],
+                })
+
+    if not cells:
+        return []
+
+    x0 = min(c["x0"] for c in cells)
+    y0 = min(c["y0"] for c in cells)
+    x1 = max(c["x1"] for c in cells)
+    y1 = max(c["y1"] for c in cells)
+
+    table_area = (x1 - x0) * (y1 - y0)
+    page_area = h * w
+    if table_area < page_area * 0.01 or table_area > page_area * 0.5:
+        return []
+
+    return [{
+        "cells": cells,
+        "bbox": (x0, y0, x1, y1),
+        "rows": 1 + len(data_rows),
+        "cols": len(col_centers),
+    }]
+
+
+def extract_with_columns(boxes, texts, col_positions, header_y_range=None):
+    """Extract table using manually specified column positions.
+
+    Args:
+        boxes: OCR text boxes [(x0,y0,x1,y1), ...]
+        texts: OCR texts [str, ...]
+        col_positions: list of x-coordinates marking column centers/boundaries
+        header_y_range: optional (y_min, y_max) to restrict header search
+
+    Returns:
+        List of tables in same format as extract()
+    """
+    if len(boxes) < 4 or len(col_positions) < 2:
+        return []
+
+    # Filter tiny text
+    filtered = []
+    for box, text in zip(boxes, texts):
+        x0, y0, x1, y1 = box
+        bw, bh = x1 - x0, y1 - y0
+        if bw < 8 or bh < 8 or bw * bh < 100:
+            continue
+        if not text or not text.strip():
+            continue
+        filtered.append((x0, y0, x1, y1, text))
+
+    if len(filtered) < 4:
+        return []
+
+    # Find header row
+    y_groups = {}
+    for x0, y0, x1, y1, text in filtered:
+        yc = round((y0 + y1) / 2)
+        y_groups.setdefault(yc, []).append((x0, y0, x1, y1, text))
+
+    sorted_yc = sorted(y_groups.keys())
+    merged_groups = []
+    current_group = [sorted_yc[0]]
+    for yc in sorted_yc[1:]:
+        if yc - current_group[-1] <= 15:
+            current_group.append(yc)
+        else:
+            merged_groups.append(current_group)
+            current_group = [yc]
+    merged_groups.append(current_group)
+
+    header_row = None
+    for group in merged_groups:
+        if header_y_range:
+            group_y = (min(group) + max(group)) / 2
+            if group_y < header_y_range[0] or group_y > header_y_range[1]:
+                continue
+        all_texts = []
+        for yc in group:
+            all_texts.extend(y_groups[yc])
+        if len(all_texts) < 2:
+            continue
+        matched = sum(1 for _, _, _, _, t in all_texts if match_field(t))
+        if matched >= 2:
+            header_row = all_texts
+            break
+
+    if not header_row:
+        # If no header found, use first group with enough texts
+        for group in merged_groups:
+            if header_y_range:
+                group_y = (min(group) + max(group)) / 2
+                if group_y < header_y_range[0] or group_y > header_y_range[1]:
+                    continue
+            all_texts = []
+            for yc in group:
+                all_texts.extend(y_groups[yc])
+            if len(all_texts) >= len(col_positions):
+                header_row = all_texts
+                break
+
+    if not header_row:
+        return []
+
+    header_row.sort(key=lambda r: r[0])
+    header_y = max(y1 for _, _, _, y1, _ in header_row)
+
+    # Sort column positions
+    col_positions = sorted(col_positions)
+
+    # Find data rows below header
+    row_starters = []
+    no_col_x = col_positions[0]
+    no_col_tol = 30
+    for x0, y0, x1, y1, text in filtered:
+        xc = (x0 + x1) / 2
+        if abs(xc - no_col_x) <= no_col_tol and y0 > header_y + 10:
+            if re.match(r'^\d{1,3}$', text.strip()):
+                row_starters.append((y0, text))
+
+    row_starters.sort()
+    data_rows = []
+    # Restrict to BOM x-range (from first column position to last column + some margin)
+    bom_x_min = col_positions[0] - 50
+    bom_x_max = col_positions[-1] + 200  # last column + margin for wide text
+    for i, (starter_y, _) in enumerate(row_starters):
+        if i + 1 < len(row_starters):
+            row_end = row_starters[i + 1][0]
+        else:
+            row_end = starter_y + 100
+        row_texts = [(x0, y0, x1, y1, t) for x0, y0, x1, y1, t in filtered
+                     if starter_y - 5 <= y0 < row_end and bom_x_min <= x0 <= bom_x_max]
+        if row_texts:
+            row_texts.sort(key=lambda r: r[0])
+            data_rows.append(row_texts)
+
+    if not data_rows:
+        return []
+
+    # Build cells using given column positions as boundaries
+    cells = []
+
+    # Header cells
+    for x0, y0, x1, y1, text in header_row:
+        cells.append({
+            "x0": x0, "y0": y0, "x1": x1, "y1": y1,
+            "w": x1 - x0, "h": y1 - y0,
+            "_texts": [text],
+        })
+
+    # Data row cells - assign texts to columns based on col_positions
+    for row in data_rows:
+        row_ys = [y0 for _, y0, _, _, _ in row] + [y1 for _, _, _, y1, _ in row]
+        ry0 = min(row_ys)
+        ry1 = max(row_ys)
+
+        # Create column boundaries: use col_positions as left edges, last column extends to right
+        boundaries = col_positions + [99999]
+
+        col_texts = {ci: [] for ci in range(len(col_positions))}
+        for x0, y0, x1, y1, text in row:
+            xc = (x0 + x1) / 2
+            # Find which column this text belongs to based on left boundary
+            ci = 0
+            for bi in range(len(boundaries)-1):
+                if boundaries[bi] <= xc < boundaries[bi+1]:
+                    ci = bi
+                    break
+            col_texts[ci].append((x0, y0, x1, y1, text))
+
+        for ci in range(len(col_positions)):
+            blocks = col_texts[ci]
+            if not blocks:
+                cx = col_positions[ci]
+                cells.append({
+                    "x0": cx - 20, "y0": ry0, "x1": cx + 20, "y1": ry1,
+                    "w": 40, "h": ry1 - ry0, "_texts": [],
+                })
+            else:
+                cx0 = min(b[0] for b in blocks)
+                cy0 = min(b[1] for b in blocks)
+                cx1 = max(b[2] for b in blocks)
+                cy1 = max(b[3] for b in blocks)
+                cells.append({
+                    "x0": cx0, "y0": cy0, "x1": cx1, "y1": cy1,
+                    "w": cx1 - cx0, "h": cy1 - cy0,
+                    "_texts": [b[4] for b in blocks],
+                })
+
+    if not cells:
+        return []
+
+    # Build table structure
+    cell_text_map = {i: c.get("_texts", []) for i, c in enumerate(cells)}
+
+    # Group cells by row
+    by_row = {}
+    for i, c in enumerate(cells):
+        key = round(c["y0"] / 4)
+        by_row.setdefault(key, []).append((c["x0"], i))
+
+    rows = []
+    for key in sorted(by_row):
+        items = sorted(by_row[key])
+        rows.append([(x, cell_text_map[i]) for x, i in items])
+
+    if not rows:
+        return []
+
+    # Find header row index
+    header = pick_header(rows)
+    if not header:
+        header_idx = 0
+        headers = [(x, None, " ".join(parts)) for x, parts in rows[0]]
+    else:
+        header_idx, headers = header
+
+    records = rows_to_records(rows, header_idx, headers)
+    if not records:
+        return []
+
+    source_headers = [text for _, _, text in headers]
+    return [{
+        "bbox": (min(c["x0"] for c in cells), min(c["y0"] for c in cells),
+                 max(c["x1"] for c in cells), max(c["y1"] for c in cells)),
+        "header": source_headers,
+        "records": records,
+        "items": to_quote_items(records),
+    }]
+
+
 def extract(rgb, boxes, texts):
+    results = []
+
+    # Path 1: bordered tables (existing)
     cells = detect_cells(rgb)
     tables = group_tables(cells)
-    results = []
     for t in tables:
         cell_text = assign_text(t["cells"], boxes, texts)
         rows = build_table_rows(t, cell_text)
@@ -328,5 +729,28 @@ def extract(rgb, boxes, texts):
                     "items": to_quote_items(records),
                 }
             )
+
+    # Path 2: lineless tables (new)
+    lineless_tables = detect_lineless_tables(boxes, texts, rgb.shape)
+    for t in lineless_tables:
+        # Reuse assign_text with the synthetic cells
+        cell_text_map = {i: c.get("_texts", []) for i, c in enumerate(t["cells"])}
+        rows = build_table_rows(t, cell_text_map)
+        header = pick_header(rows)
+        if not header:
+            continue
+        header_idx, headers = header
+        records = rows_to_records(rows, header_idx, headers)
+        if records:
+            source_headers = [text for _, _, text in headers]
+            results.append(
+                {
+                    "bbox": t["bbox"],
+                    "header": source_headers,
+                    "records": records,
+                    "items": to_quote_items(records),
+                }
+            )
+
     results.sort(key=lambda r: -len(r["records"]))
     return results

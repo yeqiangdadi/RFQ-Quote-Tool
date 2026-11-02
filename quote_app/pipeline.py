@@ -1,5 +1,6 @@
 """Drawing -> quotation items pipeline."""
 
+import json
 import time
 from pathlib import Path
 
@@ -33,6 +34,18 @@ def analyze(path, workdir, progress=None):
         preview.save(workdir / preview_name, quality=82)
 
         boxes, texts = ocr_engine.ocr_image(image)
+
+        # Save OCR data for manual extraction
+        ocr_data = {
+            "boxes": boxes,
+            "texts": texts,
+            "preview_width": preview.width,
+            "preview_height": preview.height,
+            "image_width": image.width,
+            "image_height": image.height,
+        }
+        (workdir / "ocr_data.json").write_text(json.dumps(ocr_data, ensure_ascii=False), encoding="utf-8")
+
         found = extractor.extract(np.array(image), boxes, texts)
 
         scale = preview.width / image.width

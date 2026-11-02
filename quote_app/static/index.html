@@ -272,6 +272,7 @@
       </div>
       <div class="actions">
         <button class="btn ghost" id="addRowBtn">＋ 添加行</button>
+        <button class="btn ghost" id="manualColBtn">手动标列</button>
         <button class="btn ghost" id="copyBtn">复制表格</button>
         <button class="btn" id="printBtn">打印 / 存 PDF</button>
         <button class="btn primary" id="exportBtn">下载 Excel</button>
@@ -308,6 +309,25 @@
     </ol>
     <span>所有识别在本机完成，图纸不会上传到网络。</span>
   </footer>
+</div>
+
+<!-- Manual column marking modal -->
+<div id="manualColModal" hidden style="position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:100;display:flex;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:12px;padding:20px;max-width:90vw;max-height:90vh;display:flex;flex-direction:column;position:relative;">
+    <h3 style="margin:0 0 12px;">手动标记列位置</h3>
+    <p style="color:#666;font-size:13px;margin:0 0 12px;">点击预览图添加列标记，再次点击标记可删除。拖拽可调整位置。</p>
+    <div id="manualColImageContainer" style="flex:1;overflow:auto;position:relative;border:1px solid #ddd;min-height:400px;">
+      <div style="position:relative;display:inline-block;cursor:crosshair;" id="manualColImageWrap">
+        <img id="manualColImage" style="display:block;max-width:100%;pointer-events:none;" />
+        <svg id="manualColSvg" style="position:absolute;inset:0;width:100%;height:100%;"></svg>
+      </div>
+    </div>
+    <div id="manualColLoading" style="text-align:center;padding:40px;color:#999;">加载中...</div>
+    <div style="margin-top:16px;display:flex;gap:10px;justify-content:flex-end;">
+      <button class="btn" id="manualColCancelBtn">取消</button>
+      <button class="btn primary" id="manualColExtractBtn">提取表格</button>
+    </div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -781,6 +801,148 @@ function toast(message) {
   el.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
+}
+
+/* ---------- manual column marking ---------- */
+const manualColState = { markers: [], dragging: null, dragStartX: 0, dragStartMarkerX: 0 };
+
+$('manualColBtn').addEventListener('click', openManualColModal);
+$('manualColCancelBtn').addEventListener('click', () => $('manualColModal').hidden = true);
+$('manualColExtractBtn').addEventListener('click', extractWithManualCols);
+
+function openManualColModal() {
+  if (!state.jobId) return;
+  manualColState.markers = [];
+  $('manualColModal').hidden = false;
+
+  const previewPath = `/media/${state.jobId}/page1.jpg`;
+  const img = $('manualColImage');
+  const loading = $('manualColLoading');
+  const wrap = $('manualColImageWrap');
+
+  loading.style.display = 'block';
+  wrap.style.display = 'none';
+  img.src = previewPath;
+  $('manualColSvg').innerHTML = '';
+
+  img.onload = () => {
+    loading.style.display = 'none';
+    wrap.style.display = 'inline-block';
+    const svg = $('manualColSvg');
+    svg.setAttribute('width', img.clientWidth);
+    svg.setAttribute('height', img.clientHeight);
+  };
+  img.onerror = () => {
+    loading.textContent = '预览图加载失败';
+    loading.style.color = '#e74c3c';
+  };
+}
+
+$('manualColImageWrap').addEventListener('click', (e) => {
+  if (manualColState.dragging) return;
+  const rect = e.currentTarget.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+
+  // Check if clicking near existing marker
+  const existingIdx = manualColState.markers.findIndex(m => Math.abs(m.x - x) < 15);
+  if (existingIdx >= 0) {
+    manualColState.markers.splice(existingIdx, 1);
+  } else {
+    manualColState.markers.push({ x });
+    manualColState.markers.sort((a, b) => a.x - b.x);
+  }
+  renderMarkers();
+});
+
+function renderMarkers() {
+  const svg = $('manualColSvg');
+  const img = $('manualColImage');
+  svg.innerHTML = '';
+  const imgHeight = img.clientHeight || img.naturalHeight || 600;
+  manualColState.markers.forEach((m, i) => {
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', m.x);
+    line.setAttribute('y1', 0);
+    line.setAttribute('x2', m.x);
+    line.setAttribute('y2', imgHeight);
+    line.setAttribute('stroke', '#0d6b5c');
+    line.setAttribute('stroke-width', '2');
+    line.setAttribute('stroke-dasharray', '4,2');
+    line.style.pointerEvents = 'stroke';
+    line.style.cursor = 'ew-resize';
+    line.addEventListener('mousedown', (e) => startDrag(e, i));
+    svg.appendChild(line);
+
+    const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    label.setAttribute('x', m.x + 4);
+    label.setAttribute('y', 16);
+    label.setAttribute('fill', '#0d6b5c');
+    label.setAttribute('font-size', '12');
+    label.textContent = `列${i + 1}`;
+    svg.appendChild(label);
+  });
+}
+
+function startDrag(e, idx) {
+  e.stopPropagation();
+  manualColState.dragging = idx;
+  manualColState.dragStartX = e.clientX;
+  manualColState.dragStartMarkerX = manualColState.markers[idx].x;
+  document.addEventListener('mousemove', onDrag);
+  document.addEventListener('mouseup', endDrag);
+}
+
+function onDrag(e) {
+  if (manualColState.dragging === null) return;
+  const dx = e.clientX - manualColState.dragStartX;
+  manualColState.markers[manualColState.dragging].x = manualColState.dragStartMarkerX + dx;
+  renderMarkers();
+}
+
+function endDrag() {
+  manualColState.dragging = null;
+  document.removeEventListener('mousemove', onDrag);
+  document.removeEventListener('mouseup', endDrag);
+}
+
+async function extractWithManualCols() {
+  if (manualColState.markers.length < 2) {
+    toast('请至少标记 2 列');
+    return;
+  }
+
+  const btn = $('manualColExtractBtn');
+  btn.disabled = true;
+  btn.textContent = '提取中...';
+
+  try {
+    const resp = await fetch('/api/manual_extract', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        job_id: state.jobId,
+        col_positions: manualColState.markers.map(m => m.x),
+      }),
+    });
+    if (!resp.ok) throw new Error(await resp.text());
+    const data = await resp.json();
+
+    if (!data.success) {
+      throw new Error(data.error || '提取失败');
+    }
+
+    // Update state with new results
+    state.items = (data.items || []).map((item) => ({ ...item, source: item.source || {} }));
+    state.sourceHeaders = data.header || collectHeaders(state.items);
+    renderTable();
+    $('manualColModal').hidden = true;
+    toast(`提取成功：${state.items.length} 条`);
+  } catch (err) {
+    toast(`提取失败：${err.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '提取表格';
+  }
 }
 </script>
 </body>
