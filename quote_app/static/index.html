@@ -860,21 +860,37 @@ function renderMarkers() {
   svg.innerHTML = '';
   const imgHeight = img.clientHeight || img.naturalHeight || 600;
   manualColState.markers.forEach((m, i) => {
-    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    line.setAttribute('x1', m.x);
-    line.setAttribute('y1', 0);
-    line.setAttribute('x2', m.x);
-    line.setAttribute('y2', imgHeight - 20);
-    line.setAttribute('stroke', '#0d6b5c');
-    line.setAttribute('stroke-width', '1');
-    line.setAttribute('stroke-dasharray', '3,3');
-    line.setAttribute('opacity', '0.4');
-    line.style.pointerEvents = 'stroke';
-    line.style.cursor = 'ew-resize';
-    line.addEventListener('mouseenter', () => line.setAttribute('opacity', '0.8'));
-    line.addEventListener('mouseleave', () => line.setAttribute('opacity', '0.4'));
-    line.addEventListener('mousedown', (e) => startDrag(e, i));
-    svg.appendChild(line);
+    // Top tick mark
+    const topTick = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    topTick.setAttribute('x1', m.x);
+    topTick.setAttribute('y1', 0);
+    topTick.setAttribute('x2', m.x);
+    topTick.setAttribute('y2', 15);
+    topTick.setAttribute('stroke', '#0d6b5c');
+    topTick.setAttribute('stroke-width', '2');
+    topTick.setAttribute('opacity', '0.6');
+    topTick.style.pointerEvents = 'stroke';
+    topTick.style.cursor = 'ew-resize';
+    topTick.addEventListener('mouseenter', () => { topTick.setAttribute('opacity', '1'); bottomTick.setAttribute('opacity', '1'); });
+    topTick.addEventListener('mouseleave', () => { topTick.setAttribute('opacity', '0.6'); bottomTick.setAttribute('opacity', '0.6'); });
+    topTick.addEventListener('mousedown', (e) => startDrag(e, i));
+    svg.appendChild(topTick);
+
+    // Bottom tick mark
+    const bottomTick = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    bottomTick.setAttribute('x1', m.x);
+    bottomTick.setAttribute('y1', imgHeight - 15);
+    bottomTick.setAttribute('x2', m.x);
+    bottomTick.setAttribute('y2', imgHeight);
+    bottomTick.setAttribute('stroke', '#0d6b5c');
+    bottomTick.setAttribute('stroke-width', '2');
+    bottomTick.setAttribute('opacity', '0.6');
+    bottomTick.style.pointerEvents = 'stroke';
+    bottomTick.style.cursor = 'ew-resize';
+    bottomTick.addEventListener('mouseenter', () => { topTick.setAttribute('opacity', '1'); bottomTick.setAttribute('opacity', '1'); });
+    bottomTick.addEventListener('mouseleave', () => { topTick.setAttribute('opacity', '0.6'); bottomTick.setAttribute('opacity', '0.6'); });
+    bottomTick.addEventListener('mousedown', (e) => startDrag(e, i));
+    svg.appendChild(bottomTick);
 
     const labelBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
     labelBg.setAttribute('x', m.x - 2);
