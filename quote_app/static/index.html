@@ -878,7 +878,7 @@ function renderMarkers() {
 
     const labelBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
     labelBg.setAttribute('x', m.x - 2);
-    labelBg.setAttribute('y', 0);
+    labelBg.setAttribute('y', imgHeight - 16);
     labelBg.setAttribute('width', '28');
     labelBg.setAttribute('height', '16');
     labelBg.setAttribute('fill', '#0d6b5c');
@@ -888,7 +888,7 @@ function renderMarkers() {
 
     const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
     label.setAttribute('x', m.x + 2);
-    label.setAttribute('y', 12);
+    label.setAttribute('y', imgHeight - 4);
     label.setAttribute('fill', '#fff');
     label.setAttribute('font-size', '10');
     label.setAttribute('font-weight', 'bold');
@@ -930,12 +930,17 @@ async function extractWithManualCols() {
   btn.textContent = '提取中...';
 
   try {
+    const img = $('manualColImage');
+    // Scale from display coords to preview coords (API expects preview coords)
+    const previewWidth = 1400; // Standard preview width
+    const displayWidth = img.clientWidth;
+    const scale = previewWidth / displayWidth;
     const resp = await fetch('/api/manual_extract', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         job_id: state.jobId,
-        col_positions: manualColState.markers.map(m => m.x),
+        col_positions: manualColState.markers.map(m => m.x * scale),
       }),
     });
     if (!resp.ok) throw new Error(await resp.text());
@@ -958,6 +963,13 @@ async function extractWithManualCols() {
     btn.textContent = '提取表格';
   }
 }
+
+// Export to window for external access
+window.state = state;
+window.manualColState = manualColState;
+window.openManualColModal = openManualColModal;
+window.renderMarkers = renderMarkers;
+window.extractWithManualCols = extractWithManualCols;
 </script>
 </body>
 </html>
