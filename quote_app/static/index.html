@@ -864,7 +864,7 @@ function renderMarkers() {
     line.setAttribute('x1', m.x);
     line.setAttribute('y1', 0);
     line.setAttribute('x2', m.x);
-    line.setAttribute('y2', imgHeight);
+    line.setAttribute('y2', imgHeight - 20);
     line.setAttribute('stroke', '#0d6b5c');
     line.setAttribute('stroke-width', '1');
     line.setAttribute('stroke-dasharray', '3,3');
@@ -878,7 +878,7 @@ function renderMarkers() {
 
     const labelBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
     labelBg.setAttribute('x', m.x - 2);
-    labelBg.setAttribute('y', imgHeight - 16);
+    labelBg.setAttribute('y', imgHeight - 18);
     labelBg.setAttribute('width', '28');
     labelBg.setAttribute('height', '16');
     labelBg.setAttribute('fill', '#0d6b5c');
@@ -888,7 +888,7 @@ function renderMarkers() {
 
     const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
     label.setAttribute('x', m.x + 2);
-    label.setAttribute('y', imgHeight - 4);
+    label.setAttribute('y', imgHeight - 6);
     label.setAttribute('fill', '#fff');
     label.setAttribute('font-size', '10');
     label.setAttribute('font-weight', 'bold');
